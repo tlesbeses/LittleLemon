@@ -10,7 +10,14 @@ class CategorySerializer(serializers.ModelSerializer):
 
 class MenuItemSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
-    category_id = serializers.IntegerField(write_only=True)
+    category_id = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.all(),
+        source='category', # Maps category_id back to the category field on saved model
+        write_only=True,
+        error_messages={
+            'does_not_exist': 'The specified category does not exist.'
+        }
+    )
 
     class Meta:
         model = MenuItem
