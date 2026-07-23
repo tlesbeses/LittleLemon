@@ -6,6 +6,8 @@ from django.contrib.auth.models import User, Group
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError, PermissionDenied
+from rest_framework.filters import SearchFilter, OrderingFilter
+from django_filters.rest_framework import DjangoFilterBackend
 
 
 from .models import Category, MenuItem, Cart, Order, OrderItem
@@ -44,6 +46,20 @@ class MenuItemViewSet(viewsets.ModelViewSet):
                 ]
 
             return [permission() for permission in permission_classes]
+        
+    filter_backends = [
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    ]
+
+    filterset_fields = ["category", "price"]
+
+    search_fields = ["title"]
+
+    ordering_fields = ["price", "inventory", "title"]
+
+    ordering = ["title"]
 
 class CartView(generics.ListCreateAPIView):
     serializer_class = CartSerializer
@@ -79,7 +95,24 @@ class CartView(generics.ListCreateAPIView):
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
+    
+    filter_backends = [
+        DjangoFilterBackend,
+        OrderingFilter,
+    ]
 
+    filterset_fields = [
+        "status",
+        "delivery_crew",
+        "date",
+    ]
+
+    ordering_fields = [
+        "date",
+        "total",
+    ]
+
+    ordering = ["-date"]
     def get_queryset(self):
         user = self.request.user
 
