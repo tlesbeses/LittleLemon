@@ -26,24 +26,10 @@ class MenuItemSerializer(serializers.ModelSerializer):
 
 
 class CartSerializer(serializers.ModelSerializer):
-    menuitem = MenuItemSerializer(read_only=True)
-    menuitem_id = serializers.IntegerField(write_only=True)
-
     class Meta:
         model = Cart
-        fields = ['id', 'user', 'menuitem', 'menuitem_id', 'quantity', 'unit_price', 'price']
-        read_only_fields = ['user', 'unit_price', 'price']
-
-    def create(self, validated_data):
-        # Auto-calculate unit_price and total price based on MenuItem price
-        menuitem_id = validated_data.get('menuitem_id')
-        menuitem = MenuItem.objects.get(pk=menuitem_id)
-        quantity = validated_data.get('quantity')
-        
-        validated_data['unit_price'] = menuitem.price
-        validated_data['price'] = menuitem.price * quantity
-        return super().create(validated_data)
-
+        fields = "__all__"
+        read_only_fields = ["user", "unit_price", "price"]
 
 class OrderItemSerializer(serializers.ModelSerializer):
     menuitem = MenuItemSerializer(read_only=True)
@@ -54,12 +40,24 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 
 class OrderSerializer(serializers.ModelSerializer):
-    order_items = OrderItemSerializer(many=True, read_only=True, source='orderitem_set')
+    order_items = OrderItemSerializer(
+        many=True,
+        read_only=True,
+        source="orderitem_set"
+    )
 
     class Meta:
         model = Order
-        fields = ['id', 'user', 'delivery_crew', 'status', 'total', 'date', 'order_items']
-        read_only_fields = ['user', 'total', 'date']
+        fields = [
+            "id",
+            "user",
+            "delivery_crew",
+            "status",
+            "total",
+            "date",
+            "order_items",
+        ]
+        read_only_fields = ["user", "total", "date"]
         
 class UserSerializer(serializers.ModelSerializer):
     class Meta:

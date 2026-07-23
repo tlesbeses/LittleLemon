@@ -2,8 +2,7 @@ from django.urls import path
 from .views import (
     CategoryViewSet,
     MenuItemViewSet,
-    CartListCreateView,
-    CartClearView,
+    CartView,
     OrderViewSet,
     GroupManagementViewSet,
 )
@@ -17,10 +16,8 @@ urlpatterns = [
     path('menu-items/', MenuItemViewSet.as_view({'get': 'list', 'post': 'create'}), name='menuitem-list'),
     path('menu-items/<int:pk>/', MenuItemViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='menuitem-detail'),
 
-    # Cart endpoints
-    path('cart/menu-items/', CartListCreateView.as_view(), name='cart-list-create'),
-    path('cart/clear/', CartClearView.as_view(), name='cart-clear'),
-
+    path("cart/menu-items/", CartView.as_view()),
+  
     # Order endpoints
     path('orders/', OrderViewSet.as_view({'get': 'list', 'post': 'create'}), name='order-list'),
     path('orders/<int:pk>/', OrderViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='order-detail'),
@@ -38,4 +35,24 @@ urlpatterns = [
             "delete": "destroy",
         }),
     ),
+    
+     path(
+        "orders/",
+        OrderViewSet.as_view({
+            "get": "list",
+            "post": "create",
+        }),
+        name="order-list",
+    ),
+    path(
+        "orders/<int:pk>/",
+        OrderViewSet.as_view({
+            "get": "retrieve",
+            "put": "update",
+            "patch": "partial_update",
+            "delete": "destroy",
+        }),
+        name="order-detail",
+    ),
+    
 ]

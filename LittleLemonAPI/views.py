@@ -1,8 +1,11 @@
+from decimal import Decimal
+
 from rest_framework import generics, viewsets, status
 from rest_framework.permissions import IsAuthenticated, DjangoModelPermissions
 from django.contrib.auth.models import User, Group
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError, PermissionDenied
 
 
 from .models import Category, MenuItem, Cart, Order, OrderItem
@@ -11,14 +14,9 @@ from .serializers import (
     MenuItemSerializer,
     CartSerializer,
     OrderSerializer,
-    OrderItemSerializer,
     UserSerializer,
 )
 
-
-from rest_framework.permissions import IsAdminUser
-
-# Category Views
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
@@ -33,7 +31,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
         return [permission() for permission in permission_classes]
     
-# MenuItem Views
 class MenuItemViewSet(viewsets.ModelViewSet):
     queryset = MenuItem.objects.select_related('category').all()
     serializer_class = MenuItemSerializer
@@ -48,44 +45,117 @@ class MenuItemViewSet(viewsets.ModelViewSet):
 
             return [permission() for permission in permission_classes]
 
-
-# Cart Views (User-specific)
-class CartListCreateView(generics.ListCreateAPIView):
+class CartView(generics.ListCreateAPIView):
     serializer_class = CartSerializer
-    permission_classes = [IsAuthenticated, DjangoModelPermissions]
-
-    def get_queryset(self):
-        return Cart.objects.filter(user=self.request.user).select_related('menuitem')
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-
-class CartClearView(generics.DestroyAPIView):
-    permission_classes = [IsAuthenticated, DjangoModelPermissions]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return Cart.objects.filter(user=self.request.user)
 
-    def delete(self, request, *args, **kwargs):
+    def perform_create(self, serializer):
+        menu_item = serializer.validated_data["menuitem"]
+        quantity = serializer.validated_data["quantity"]
+        
+        cart_item = Cart.objects.filter(
+                user=self.request.user,
+                menuitem=menu_item
+            ).first()
+
+        if cart_item:
+            cart_item.quantity += quantity
+            cart_item.price = cart_item.quantity * cart_item.unit_price
+            cart_item.save()
+            return
+        
+        serializer.save(
+            user=self.request.user,
+            unit_price=menu_item.price,
+            price=menu_item.price * quantity,
+        )
+    def delete(self, request):
         Cart.objects.filter(user=request.user).delete()
-        return super().delete(request, *args, **kwargs)
-
-
-# Order Views
+        return Response(status=status.HTTP_200_OK)
+    
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
-    permission_classes = [IsAuthenticated, DjangoModelPermissions]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff:
+
+        if user.groups.filter(name="Manager").exists():
             return Order.objects.all()
+
+        if user.groups.filter(name="Delivery crew").exists():
+            return Order.objects.filter(delivery_crew=user)
+
         return Order.objects.filter(user=user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        cart_items = Cart.objects.filter(user=self.request.user)
+
+        if not cart_items.exists():
+            raise ValidationError("Cart is empty.")
+
+        total = Decimal("0.00")
+
+        for item in cart_items:
+            total += item.price
+
+        order = serializer.save(
+            user=self.request.user,
+            total=total
+        )
+
+        for item in cart_items:
+            OrderItem.objects.create(
+                order=order,
+                menuitem=item.menuitem,
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                price=item.price
+            )
+
+        cart_items.delete()
         
+    def update(self, request, *args, **kwargs):
+        order = self.get_object()
+        user = request.user
+
+        # Manager
+        if user.groups.filter(name="Manager").exists():
+            serializer = self.get_serializer(
+                order,
+                data=request.data,
+                partial=kwargs.get("partial", False)
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+
+        # Delivery crew
+        if user.groups.filter(name="Delivery crew").exists():
+            serializer = self.get_serializer(
+                order,
+                data={"status": request.data.get("status")},
+                partial=True
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+
+        raise PermissionDenied("Customers cannot update orders.")
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs["partial"] = True
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not request.user.groups.filter(name="Manager").exists():
+            raise PermissionDenied("Only managers can delete orders.")
+
+        return super().destroy(request, *args, **kwargs) 
+    
 class GroupManagementViewSet(viewsets.ViewSet):
     
     def get_permissions(self):
