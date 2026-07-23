@@ -5,6 +5,7 @@ from .views import (
     CartListCreateView,
     CartClearView,
     OrderViewSet,
+    GroupManagementViewSet,
 )
 
 urlpatterns = [
@@ -23,4 +24,18 @@ urlpatterns = [
     # Order endpoints
     path('orders/', OrderViewSet.as_view({'get': 'list', 'post': 'create'}), name='order-list'),
     path('orders/<int:pk>/', OrderViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='order-detail'),
+    
+    path(
+        "groups/<str:group_name>/users/",
+        GroupManagementViewSet.as_view({
+            "get": "list",
+            "post": "create",
+        }),
+    ),
+    path(
+        "groups/<str:group_name>/users/<int:pk>/",
+        GroupManagementViewSet.as_view({
+            "delete": "destroy",
+        }),
+    ),
 ]
